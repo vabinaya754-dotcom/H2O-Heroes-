@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>H2O HEROES — Groundwater Conservation Game</title>
+<style>
+  :root{--bg:#cbeef0;--panel:#064e40;--accent:#00a896;--card:#ffffffdd}
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial; background:linear-gradient(180deg,var(--bg),#9fdbe0)}
+  #app{display:flex;align-items:center;justify-content:center;height:100%;}
+  .screen{width:920px;max-width:96vw;height:640px;max-height:92vh;background:linear-gradient(180deg,#e6fff9,#d0f6f0);box-shadow:0 10px 30px rgba(0,0,0,.15);border-radius:12px;overflow:hidden;position:relative}
+  header{height:64px;background:var(--panel);color:white;padding:8px 16px;display:flex;align-items:center;gap:12px}
+  header h1{margin:0;font-size:20px}
+  .leftcol{position:absolute;left:12px;top:84px;width:240px;bottom:12px;background:var(--card);border-radius:10px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.08);overflow:auto}
+  .right{position:absolute;right:12px;top:84px;bottom:12px;width:calc(100% - 276px);display:flex;flex-direction:column;align-items:center;justify-content:center}
+  button.big{display:inline-block;padding:14px 18px;border-radius:10px;background:var(--accent);color:#fff;border:0;font-size:18px;cursor:pointer;box-shadow:0 6px 12px rgba(0,0,0,.12)}
+  button.ghost{background:transparent;color:var(--panel);border:2px solid var(--panel)}
+  .menu{display:flex;flex-direction:column;gap:12px;align-items:center}
+  canvas#game{background:linear-gradient(#b4f0e6,#9fe1d8);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.06);touch-action:none}
+  .controls{display:flex;gap:8px;margin-top:8px}
+  .small{padding:8px 10px;font-size:14px}
+  .status{font-size:14px;margin-bottom:8px}
+  .footerNote{position:absolute;left:12px;bottom:12px;font-size:12px;color:#024}
+  .panelTitle{font-weight:700;margin-bottom:6px}
+  .modeRow{display:flex;gap:8px}
+  .codeBox{background:#f7fffc;padding:8px;border-radius:6px;border:1px dashed #bfeee2;font-weight:700}
+  /* touch buttons */
+  .touchControls{position:absolute;left:14px;bottom:14px;display:none}
+  .touchBtn{width:54px;height:54px;border-radius:10px;border:0;background:#ffffffcc;box-shadow:0 4px 10px rgba(0,0,0,.12);font-weight:700}
+  .notification {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 14px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    pointer-events: none;
+  }
+  @media (max-width:800px){.screen{height:92vh;width:96vw}.leftcol{display:none}.right{right:12px;left:12px}.touchControls{display:flex}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="screen">
+    <header>
+      <h1>H2O HEROES 💧</h1>
+      <div style="margin-left:auto;font-size:13px">Save groundwater — play & learn!</div>
+    </header>
+
+    <div class="leftcol" id="leftPanel">
+      <div class="panelTitle">Game Menu</div>
+      <div id="menuContent">
+        <!-- menu populated by JS -->
+      </div>
+      <hr />
+      <div class="panelTitle">How to play</div>
+      <ul style="padding-left:18px;margin:6px 0 12px 0">
+        <li>Move: Arrow keys / WASD or on-screen buttons (mobile)</li>
+        <li>Action: Space / Tap on action button — water plants or pick water</li>
+        <li>Complete tasks to finish level — water plants, fix leaks, refill bucket</li>
+      </ul>
+      <div class="panelTitle">Multiplayer (same device)</div>
+      <p style="margin:6px 0 8px 0">Generate a team code and ask friends to join on the same device (or share the code to join on another device when we add network play).</p>
+      <div class="footerNote">Designed to be kid-friendly — colourful, simple controls.</div>
+    </div>
+
+    <div class="right">
+      <div id="screenArea" style="width:88%;height:84%;display:flex;align-items:center;justify-content:center;flex-direction:column">
+        <!-- dynamic area -->
+      </div>
+    </div>
+
+    <div class="touchControls" id="touchControls">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-right:8px">
+        <button class="touchBtn" id="btnUp">↑</button>
+        <div style="display:flex;gap:8px"><button class="touchBtn" id="btnLeft">←</button><button class="touchBtn" id="btnDown">↓</button><button class="touchBtn" id="btnRight">→</button></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:center"><button class="touchBtn" id="btnAction">💧</button></div>
+    </div>
+
+    <div id="notificationLayer" class="notification" style="display:none"></div>
+
+  </div>
+</div>
+
+<script>
+/* H2O HEROES - Single-file web game
+   Fixes included:
+   - Action is processed once per press (prevents auto-repeat confusion).
+   - Leak-fixing reliably sets leaks to fixed and increments task only once.
+   - Small notification when a leak is fixed.
+*/
+
+const app = {
+  mode: 'menu', // menu, single, multiplayer, playing
+  players: [],
+  localState: {},
+  roomCode: null,
+  level: 1
+}
+
+const LEFT_PANEL = document.getElementById('menuContent')
+const SCREEN_AREA = document.getElementById('screenArea')
+const NOTIF = document.getElementById('notificationLayer')
+
+function makeMenu() {
+  SCREEN_AREA.innerHTML = ''
+  const div = document.createElement('div')
+  div.className = 'menu'
+  const startBtn = document.createElement('button')
+  startBtn.className = 'big'
+  startBtn.innerText = 'Start'
+  startBtn.onclick = ()=> showModeSelect()
+  const quitBtn = document.createElement('button')
+  quitBtn.className = 'big ghost'
+  quitBtn.innerText = 'Quit'
+  quitBtn.onclick = ()=> window.close?.() || alert('Thanks for playing H2O HEROES — close the tab to exit.')
+  div.appendChild(startBtn)
+  div.appendChild(quitBtn)
+  SCREEN_AREA.appendChild(div)
+}
+
+function showModeSelect(){
+  SCREEN_AREA.innerHTML = ''
+  const c = document.createElement('div')
+  c.className='menu'
+  const single = document.createElement('button')
+  single.className='big'
+  single.innerText='Single Player'
+  single.onclick = ()=> showLevelSelect()
+  const multi = document.createElement('button')
+  multi.className='big ghost'
+  multi.innerText='Multiplayer'
+  multi.onclick = ()=> showMultiplayerOptions()
+  const back = document.createElement('button')
+  back.className='small'
+  back.innerText='Back'
+  back.onclick = ()=> makeMenu()
+  c.appendChild(single);c.appendChild(multi);c.appendChild(back)
+  SCREEN_AREA.appendChild(c)
+}
+
+function showLevelSelect(){
+  SCREEN_AREA.innerHTML=''
+  const c=document.createElement('div');c.className='menu'
+  const title=document.createElement('div');title.style.fontWeight=700;title.innerText='Choose Level (Easy → Hard)'
+  c.appendChild(title)
+  for(let i=1;i<=3;i++){
+    const b=document.createElement('button');b.className='big';b.innerText='Level '+i
+    b.onclick=()=>{app.level=i; startSinglePlayer(i)}
+    c.appendChild(b)
+  }
+  const back=document.createElement('button');back.className='small';back.innerText='Back';back.onclick=()=> showModeSelect();c.appendChild(back)
+  SCREEN_AREA.appendChild(c)
+}
+
+function showMultiplayerOptions(){
+  SCREEN_AREA.innerHTML=''
+  const c=document.createElement('div');c.className='menu'
+  const duo=document.createElement('button');duo.className='big';duo.innerText='Duo'
+  duo.onclick=()=> startMultiplayer('duo')
+  const squad=document.createElement('button');squad.className='big ghost';squad.innerText='Squad (3)'
+  squad.onclick=()=> startMultiplayer('squad')
+  const generate=document.createElement('button');generate.className='small';generate.innerText='Generate Team Code';
+  generate.onclick=()=>{
+    const code = Math.random().toString(36).slice(2,6).toUpperCase()
+    app.roomCode = code
+    alert('Team code: '+code+' — share this to let friends join on the same device (or when network play is added).')
+    showJoinRoom(code)
+  }
+  const enter=document.createElement('button');enter.className='small';enter.innerText='Enter Team Code'
+  enter.onclick=()=>{ const code = prompt('Enter team code:'); if(code) showJoinRoom(code.toUpperCase()) }
+  const back=document.createElement('button');back.className='small';back.innerText='Back';back.onclick=()=> showModeSelect()
+  c.appendChild(duo);c.appendChild(squad);c.appendChild(generate);c.appendChild(enter);c.appendChild(back)
+  SCREEN_AREA.appendChild(c)
+}
+
+function showJoinRoom(code){
+  SCREEN_AREA.innerHTML=''
+  const c=document.createElement('div');c.className='menu'
+  const title=document.createElement('div');title.style.fontWeight=700;title.innerText='Team Code: '+code
+  c.appendChild(title)
+  const joinBtn=document.createElement('button');joinBtn.className='big';joinBtn.innerText='Join Room (Add Player)'
+  joinBtn.onclick=()=>{ const id = Date.now().toString(36).slice(-4); app.players.push(makePlayer(id)); alert('Player added — total players: '+app.players.length); if(app.players.length>0) startMultiplayerPlay(code) }
+  const startBtn=document.createElement('button');startBtn.className='big ghost';startBtn.innerText='Start Game'
+  startBtn.onclick=()=>{ if(app.players.length===0) app.players.push(makePlayer('P1')); startMultiplayerPlay(code) }
+  const back=document.createElement('button');back.className='small';back.innerText='Back';back.onclick=()=> showMultiplayerOptions()
+  c.appendChild(joinBtn);c.appendChild(startBtn);c.appendChild(back)
+  SCREEN_AREA.appendChild(c)
+}
+
+function makePlayer(id){
+  return {id, x:100+Math.random()*200, y:100+Math.random()*200, color:randomColor(), bucket:50, score:0, name:id}
+}
+
+function randomColor(){
+  const r = 50 + Math.floor(Math.random()*180)
+  const g = 80 + Math.floor(Math.random()*130)
+  const b = 40 + Math.floor(Math.random()*160)
+  return `rgb(${r},${g},${b})`
+}
+
+/* --- GAME ENGINE --- */
+let canvas,ctx,gameLoopId
+let gameState={}
+
+function startSinglePlayer(level){
+  app.mode='playing'
+  app.players = [makePlayer('Hero')]
+  app.level=level
+  initGame(level,1)
+}
+
+function startMultiplayer(kind){
+  app.mode='multiplayer'
+  app.players = []
+  const needed = kind==='duo'?2:3
+  app.players.push(makePlayer('Host'))
+  const code = app.roomCode || Math.random().toString(36).slice(2,6).toUpperCase()
+  app.roomCode = code
+  showJoinRoom(code)
+}
+
+function startMultiplayerPlay(code){
+  app.mode='playing'
+  if(app.players.length===1) app.players.push(makePlayer('Guest'))
+  initGame(1, app.players.length)
+}
+
+function initGame(level,playersCount){
+  SCREEN_AREA.innerHTML=''
+  // create canvas
+  canvas = document.createElement('canvas')
+  canvas.id='game'
+  canvas.width = Math.min(800, Math.floor(window.innerWidth*0.85))
+  canvas.height = Math.min(520, Math.floor(window.innerHeight*0.6))
+  SCREEN_AREA.appendChild(canvas)
+  ctx = canvas.getContext('2d')
+  canvas.addEventListener('touchstart', onTouchStart, {passive:false})
+  canvas.addEventListener('touchmove', onTouchMove, {passive:false})
+  canvas.addEventListener('touchend', onTouchEnd, {passive:false})
+  setupLevel(level)
+  attachControls()
+  loop()
+}
+
+function setupLevel(level){
+  gameState.level = level
+  const mapW = 1200
+  const mapH = 800
+  gameState.mapW = mapW; gameState.mapH = mapH
+  // plants scattered
+  gameState.plants = []
+  for(let i=0;i<8 + level*4;i++){
+    gameState.plants.push({x:80+Math.random()*(mapW-160), y:80+Math.random()*(mapH-160), water:Math.random()>0.4?false:true})
+  }
+  // leaks
+  gameState.leaks = []
+  for(let i=0;i<2+level;i++) gameState.leaks.push({x:120+Math.random()*(mapW-240),y:120+Math.random()*(mapH-240),fixed:false, id: i})
+  // well
+  gameState.well = {x:mapW/2-20,y:mapH/2-20}
+  // camera
+  gameState.camX = 0; gameState.camY=0; gameState.zoom=1
+  // tasks
+  gameState.tasks = {plantsNeeded: Math.ceil(gameState.plants.length*0.75), leaksNeeded: gameState.leaks.length, plantsDone:0, leaksDone:0}
+  // notifications
+  gameState.notifications = []
+}
+
+// Controls
+const input = {left:false,right:false,up:false,down:false,action:false, actionLock:false}
+function attachControls(){
+  // keydown (ignore auto-repeat)
+  window.onkeydown = (e)=>{
+    // ignore auto-repeat 'keydown' events when the key is held (optional safeguard)
+    if (e.repeat) {
+      // allow movement repeat; but for actions we'll rely on actionLock logic below
+    }
+    if(e.key==='ArrowLeft'||e.key==='a') input.left=true
+    if(e.key==='ArrowRight'||e.key==='d') input.right=true
+    if(e.key==='ArrowUp'||e.key==='w') input.up=true
+    if(e.key==='ArrowDown'||e.key==='s') input.down=true
+    if(e.key===' '||e.key==='Enter') {
+      // mark action true; how we process it is handled in update() using actionLock
+      input.action = true
+    }
+  }
+  window.onkeyup = (e)=>{
+    if(e.key==='ArrowLeft'||e.key==='a') input.left=false
+    if(e.key==='ArrowRight'||e.key==='d') input.right=false
+    if(e.key==='ArrowUp'||e.key==='w') input.up=false
+    if(e.key==='ArrowDown'||e.key==='s') input.down=false
+    if(e.key===' '||e.key==='Enter') input.action=false
+  }
+  // touch buttons
+  document.getElementById('btnUp').onpointerdown = ()=> input.up=true
+  document.getElementById('btnUp').onpointerup = ()=> input.up=false
+  document.getElementById('btnLeft').onpointerdown = ()=> input.left=true
+  document.getElementById('btnLeft').onpointerup = ()=> input.left=false
+  document.getElementById('btnDown').onpointerdown = ()=> input.down=true
+  document.getElementById('btnDown').onpointerup = ()=> input.down=false
+  document.getElementById('btnRight').onpointerdown = ()=> input.right=true
+  document.getElementById('btnRight').onpointerup = ()=> input.right=false
+  document.getElementById('btnAction').onpointerdown = ()=>{
+    // touch action — set true briefly
+    input.action = true
+    // We'll release it on pointerup or after a short timeout to simulate a single tap
+    setTimeout(()=>{ input.action = false }, 160)
+  }
+}
+
+function onTouchStart(e){e.preventDefault();}
+function onTouchMove(e){e.preventDefault();}
+function onTouchEnd(e){e.preventDefault();}
+
+function loop(){
+  update();
+  render();
+  gameLoopId = requestAnimationFrame(loop)
+}
+
+function showNotification(text, ms=1200){
+  NOTIF.innerText = text
+  NOTIF.style.display = 'block'
+  setTimeout(()=>{ NOTIF.style.display = 'none' }, ms)
+}
+
+function update(){
+  // simple movement for first player using inputs
+  const p = app.players[0]
+  const speed = 3 + app.level*0.5
+  if(input.left) p.x -= speed
+  if(input.right) p.x += speed
+  if(input.up) p.y -= speed
+  if(input.down) p.y += speed
+  // clamp to map
+  p.x = Math.max(40, Math.min(gameState.mapW-40, p.x))
+  p.y = Math.max(40, Math.min(gameState.mapH-40, p.y))
+  // camera follows
+  gameState.camX = p.x - canvas.width/2
+  gameState.camY = p.y - canvas.height/2
+  gameState.camX = Math.max(0, Math.min(gameState.mapW - canvas.width, gameState.camX))
+  gameState.camY = Math.max(0, Math.min(gameState.mapH - canvas.height, gameState.camY))
+
+  // ACTION: process only once per press using actionLock
+  if (input.action && !input.actionLock) {
+    input.actionLock = true // lock until button released
+    // check plants
+    for(const pl of gameState.plants){
+      const dx = pl.x - p.x, dy = pl.y - p.y
+      const d2 = dx*dx + dy*dy
+      if(d2 < 40*40 && !pl.water && p.bucket>=10){
+        pl.water = true; p.bucket -= 10; p.score += 10; gameState.tasks.plantsDone++
+        showNotification('You watered a plant! +10 pts')
+      }
+    }
+    // well refill
+    const wdX = gameState.well.x - p.x, wdY = gameState.well.y - p.y
+    const wd2 = wdX*wdX + wdY*wdY
+    if(wd2 < 50*50){
+      p.bucket = 100
+      showNotification('Bucket refilled!')
+    }
+    // fix leaks
+    for(const lk of gameState.leaks){
+      const dx = lk.x - p.x, dy = lk.y - p.y
+      const ld2 = dx*dx + dy*dy
+      // when within range and not already fixed => fix and count once
+      if(ld2 < 40*40 && !lk.fixed){
+        lk.fixed = true
+        p.score += 15
+        gameState.tasks.leaksDone++
+        showNotification('Leak fixed! +15 pts')
+        // optionally break if you want only one interaction per press:
+        // break;
+      }
+    }
+  }
+  // when action released, free the lock so next press triggers again
+  if (!input.action) input.actionLock = false
+
+  // check win
+  if(gameState.tasks.plantsDone >= gameState.tasks.plantsNeeded && gameState.tasks.leaksDone >= gameState.tasks.leaksNeeded){
+    cancelAnimationFrame(gameLoopId)
+    showLevelComplete()
+  }
+}
+
+function showLevelComplete(){
+  SCREEN_AREA.innerHTML = ''
+  const c=document.createElement('div');c.className='menu'
+  const t=document.createElement('div');t.style.fontWeight=700;t.innerText='Level Complete! 🎉'
+  const score=document.createElement('div');score.innerText='Score: '+(app.players[0].score||0)
+  const next=document.createElement('button');next.className='big';next.innerText='Next Level'
+  next.onclick=()=>{app.level=Math.min(3,app.level+1); startSinglePlayer(app.level)}
+  const menu=document.createElement('button');menu.className='small';menu.innerText='Main Menu';menu.onclick=()=>{app.players=[];makeMenu()}
+  c.appendChild(t);c.appendChild(score);c.appendChild(next);c.appendChild(menu)
+  SCREEN_AREA.appendChild(c)
+}
+
+function render(){
+  if(!ctx) return
+  // clear
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  // draw map background (simple grass patches)
+  const sx = gameState.camX, sy = gameState.camY
+  // draw grid
+  ctx.fillStyle = '#d3f2ea'
+  ctx.fillRect(0,0,canvas.width,canvas.height)
+
+  // map elements relative to camera
+  // well
+  drawWell(gameState.well.x - sx, gameState.well.y - sy)
+  // plants
+  for(const pl of gameState.plants) drawPlant(pl.x - sx, pl.y - sy, pl.water)
+  // leaks
+  for(const lk of gameState.leaks) drawLeak(lk.x - sx, lk.y - sy, lk.fixed)
+  // players
+  for(let i=0;i<app.players.length;i++){
+    const pl = app.players[i]
+    drawPlayer(pl.x - sx, pl.y - sy, pl.color, pl)
+  }
+
+  // HUD
+  drawHUD()
+}
+
+function drawWell(x,y){
+  ctx.save();
+  ctx.beginPath();ctx.fillStyle='#7b4f3a';ctx.fillRect(x-20,y-20,40,40);
+  ctx.fillStyle='#7ec8ff';ctx.fillRect(x-16,y-6,32,16);
+  ctx.restore();
+}
+
+function drawPlant(x,y,watered){
+  ctx.save();
+  ctx.translate(x,y)
+  ctx.beginPath();ctx.fillStyle=watered?'#2b8f4d':'#7bbd60';ctx.ellipse(0,0,10,14,0,0,Math.PI*2);ctx.fill()
+  // small pot
+  ctx.fillStyle='#8c4b2a';ctx.fillRect(-8,12,16,6)
+  ctx.restore();
+}
+
+function drawLeak(x,y,fixed){
+  ctx.save();ctx.translate(x,y)
+  ctx.beginPath();ctx.fillStyle = fixed? '#8f8' : '#00bfff';ctx.arc(0,0,8,0,Math.PI*2);ctx.fill()
+  if(!fixed){ctx.fillStyle='#7fdbff';ctx.fillRect(-3,8,6,12)}
+  ctx.restore();
+}
+
+function drawPlayer(x,y,color,p){
+  ctx.save();ctx.translate(x,y)
+  // body
+  ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(0,6,12,16,0,0,Math.PI*2);ctx.fill()
+  // head
+  ctx.fillStyle='#ffd9b3';ctx.beginPath();ctx.arc(0,-12,9,0,Math.PI*2);ctx.fill()
+  // hair
+  ctx.fillStyle='#333';ctx.fillRect(-8,-20,16,6)
+  // bucket on hand
+  ctx.fillStyle='#d4d4d4';ctx.fillRect(10,0,8,10);ctx.fillStyle='#3aa0ff';ctx.fillRect(11,2,6,6)
+  // arm
+  ctx.fillStyle=color;ctx.fillRect(6,-2,8,6)
+  // face (smile)
+  ctx.beginPath();ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.arc(0,-10,4,0,Math.PI);ctx.stroke()
+  // name tag
+  ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fillRect(-28,-34,56,12);ctx.fillStyle='#023';ctx.font='10px sans-serif';ctx.fillText(p.name||'Hero',-24,-25)
+  ctx.restore();
+}
+
+function drawHUD(){
+  // simple HUD for player 0
+  const p = app.players[0]
+  ctx.save();
+  ctx.fillStyle='rgba(255,255,255,0.85)';ctx.fillRect(8,8,220,72);ctx.fillStyle='#023';ctx.font='14px sans-serif'
+  ctx.fillText('Player: '+(p.name||'Hero'),16,28)
+  ctx.fillText('Bucket: '+Math.round(p.bucket)+'%',16,48)
+  ctx.fillText('Score: '+(p.score||0),16,64)
+  // tasks
+  ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fillRect(canvas.width-220,8,208,72);ctx.fillStyle='#023';ctx.fillText('Level '+gameState.level,canvas.width-200,28)
+  ctx.fillText('Plants: '+gameState.tasks.plantsDone+'/'+gameState.tasks.plantsNeeded,canvas.width-200,48)
+  ctx.fillText('Leaks fixed: '+gameState.tasks.leaksDone+'/'+gameState.tasks.leaksNeeded,canvas.width-200,64)
+  ctx.restore();
+}
+
+/* --- Initialize UI --- */
+makeMenu()
+
+// expose for debugging
+window._H2O = {app, startSinglePlayer, startMultiplayer}
+
+</script>
+</body>
+</html>
