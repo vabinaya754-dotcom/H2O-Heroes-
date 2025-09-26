@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>H2O HEROES</title>
+  <style>
+    :root{
+      --bg1:#cfeefd; --card:#ffffffcc; --accent:#2aa9e0; --accent-dark:#1b7f9e;
+      --accent-2:#6ec06e;
+      --ui-shadow: 0 8px 20px rgba(0,0,0,.12);
+    }
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial, sans-serif;background:linear-gradient(180deg,var(--bg1),#a7ddf9);-webkit-font-smoothing:antialiased}
+    .app{max-width:960px;margin:14px auto;padding:12px;}
+    .screen{display:none;background:var(--card);border-radius:14px;box-shadow:var(--ui-shadow);padding:16px}
+    .screen.active{display:block}
+    header{display:flex;align-items:center;gap:12px}
+    .logo{width:72px;height:72px;display:flex;align-items:center;justify-content:center;background:linear-gradient(45deg,#7fd6ff,#2aa9e0);border-radius:14px}
+    .logo svg{width:56px;height:56px}
+    h1{margin:0;font-size:20px}
+    .center{display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .form{display:flex;flex-direction:column;gap:10px;max-width:380px;margin:20px auto}
+    input{padding:10px;border-radius:8px;border:1px solid #cfe9f9;font-size:16px}
+    button{padding:10px 14px;border-radius:10px;border:0;background:var(--accent);color:white;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;color:var(--accent-dark);border:2px solid var(--accent)}
+    .row{display:flex;gap:10px;align-items:center}
+    .profile-card{display:flex;gap:14px;align-items:center}
+    canvas#gameCanvas{background:linear-gradient(180deg,#7ec0ff,#bfefff);border-radius:10px;width:100%;height:420px;display:block}
+    .hud{display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap}
+    .tank{width:46px;height:80px;border-radius:6px;border:2px solid #0b6aa6;background:linear-gradient(#ffffff88,#bfefff);position:relative;overflow:hidden;display:flex;align-items:flex-end;justify-content:center}
+    .tank .fill{width:100%;background:rgba(20,130,200,.95);height:0;transition:height .4s}
+    .coins{display:inline-block;padding:6px 8px;background:#fff7cc;border-radius:8px}
+    .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+    .footer-row{display:flex;justify-content:space-between;margin-top:8px;align-items:center}
+    .tip{background:#e6fbff;padding:10px;border-radius:8px;border:1px solid #bfefff;max-width:66%}
+    .mobile-controls{position:fixed;right:14px;bottom:14px;display:flex;gap:8px;flex-direction:column;z-index:999}
+    .vpad{display:grid;grid-template-columns:repeat(3,56px);gap:6px;background:transparent}
+    .vbtn{width:56px;height:56px;border-radius:10px;border:none;background:rgba(255,255,255,.9);box-shadow:var(--ui-shadow);font-weight:700}
+    .action-btn{width:56px;height:56px;border-radius:50%;background:linear-gradient(45deg,var(--accent),var(--accent-dark));color:white;font-weight:800;border:0}
+    .badge-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .badge{padding:6px 8px;background:#fff;border-radius:8px;border:1px solid #e3f7ff}
+    .back-btn{position:relative}
+    @media(max-width:720px){canvas#gameCanvas{height:300px}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Welcome / Login -->
+    <section id="screen-welcome" class="screen active">
+      <header>
+        <div class="logo" aria-hidden="true">
+          <!-- water drop logo -->
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M32 2C32 2 12 22 12 36a20 20 0 0 0 40 0C52 22 32 2 32 2z" fill="#fff" opacity="0.12"/>
+            <path d="M32 4s-16 16-16 28a16 16 0 0 0 32 0C48 20 32 4 32 4z" fill="#e6fbff"/>
+            <path d="M32 8s-10 10-10 20a10 10 0 0 0 20 0C42 18 32 8 32 8z" fill="#2aa9e0"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Welcome to H2O HEROES</h1>
+          <div style="color:#045a7a;font-size:13px">A friendly game to learn groundwater conservation</div>
+        </div>
+      </header>
+
+      <div class="center">
+        <form id="loginForm" class="form" onsubmit="return false">
+          <input id="username" placeholder="Enter username" required />
+          <input id="password" type="password" placeholder="Enter password" required />
+          <div class="row">
+            <button id="loginBtn" type="submit">Login</button>
+            <button type="button" class="secondary" id="quitBtn">Quit</button>
+          </div>
+        </form>
+        <div style="font-size:13px;color:#0a5f7a">Controls: Use <strong>Arrow Keys</strong> to move and <strong>Space</strong> to interact. Mobile users can use the on-screen controls.</div>
+      </div>
+    </section>
+
+    <!-- Profile page -->
+    <section id="screen-profile" class="screen">
+      <div class="row profile-card">
+        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(#fff,#dff8ff);display:flex;align-items:center;justify-content:center;font-weight:700" id="avatarLetter">P</div>
+        <div>
+          <div id="profileName" style="font-size:18px;font-weight:700">Player</div>
+          <div id="profileScore" style="font-size:14px;color:#076884">Total Score: <span id="scoreVal">0</span></div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="row">
+        <button id="startGame">Start</button>
+        <button id="profileQuit" class="secondary">Quit</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <strong>Badges:</strong>
+        <div id="badges" class="badge-row">
+          <!-- earned badges appear here -->
+        </div>
+      </div>
+
+      <div style="margin-top:12px;color:#024a60">Back button available on every screen (or press ESC).</div>
+    </section>
+
+    <!-- Game screen -->
+    <section id="screen-game" class="screen">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700">H2O HEROES — Game World</div>
+        <div class="row">
+          <div class="coins">Coins: <span id="coinsVal">0</span></div>
+          <button id="backFromGame" class="secondary back-btn">Back</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+        <label for="levelSelect">Choose level:</label>
+        <select id="levelSelect"><option value="1">Level 1</option><option value="2">Level 2</option><option value="3">Level 3</option></select>
+        <button id="loadLevel">Load</button>
+      </div>
+
+      <canvas id="gameCanvas" width="900" height="420"></canvas>
+
+      <div class="hud" id="hudRow"></div>
+
+      <div class="footer-row">
+        <div class="tip" id="levelTip">Tip will appear here.</div>
+        <div>
+          <button id="pauseBtn" class="secondary">Pause Music</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- End / Thank you -->
+    <section id="screen-end" class="screen">
+      <h2 id="endTitle">Thank you for playing H2O HEROES</h2>
+      <p id="endText">You helped conserve groundwater!</p>
+      <div class="row">
+        <button id="restartBtn">Play Again</button>
+        <button id="exitBtn" class="secondary">Exit</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- Mobile on-screen controls (simulate arrow keys + space) -->
+  <div class="mobile-controls" id="mobileControls" style="display:none">
+    <div class="vpad" id="dpad">
+      <button class="vbtn" data-key="ArrowUp">↑</button>
+      <div></div>
+      <button class="vbtn" data-key="ArrowRight">→</button>
+      <button class="vbtn" data-key="ArrowLeft">←</button>
+      <div></div>
+      <button class="vbtn" data-key="ArrowDown">↓</button>
+    </div>
+    <button class="action-btn" id="mobileAction" title="Action (Space)">●</button>
+  </div>
+
+<script>
+/* ========== State & UI nav ========== */
+const screens = {
+  welcome: document.getElementById('screen-welcome'),
+  profile: document.getElementById('screen-profile'),
+  game: document.getElementById('screen-game'),
+  end: document.getElementById('screen-end')
+};
+function show(screen){
+  Object.values(screens).forEach(s=>s.classList.remove('active'));
+  screens[screen].classList.add('active');
+  // show mobile controls only on game screen
+  document.getElementById('mobileControls').style.display = (screen==='game' ? 'flex' : 'none');
+}
+
+/* ========== Simple auth (any non-empty username/password) ========== */
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const u = document.getElementById('username').value.trim();
+  const p = document.getElementById('password').value.trim();
+  if(!u||!p){ playClick(); alert('Please enter username and password'); return; }
+  playClick();
+  window.player = {name:u,score:0,coins:0,badges:[]};
+  document.getElementById('profileName').textContent = u;
+  document.getElementById('avatarLetter').textContent = (u[0]||'P').toUpperCase();
+  document.getElementById('scoreVal').textContent = 0;
+  updateBadges();
+  show('profile');
+});
+document.getElementById('quitBtn').addEventListener('click', ()=>{ playClick(); show('end'); });
+document.getElementById('profileQuit').addEventListener('click', ()=>{ playClick(); show('end'); });
+document.getElementById('startGame').addEventListener('click', ()=>{ playClick(); show('game'); initLevel(1); });
+document.getElementById('backFromGame').addEventListener('click', ()=>{ playClick(); show('profile'); });
+document.getElementById('restartBtn').addEventListener('click', ()=>{ playClick(); show('welcome'); });
+document.getElementById('exitBtn').addEventListener('click', ()=>{ playClick(); try{ window.close(); }catch(e){} });
+
+/* ========== Audio: small UI sounds & background melody (WebAudio) ========== */
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null, musicNodes = null;
+function ensureAudio(){ if(!audioCtx) audioCtx = new AudioCtx(); }
+function playClick(){
+  try{
+    ensureAudio();
+    const g = audioCtx.createGain(); g.gain.value = 0.15; g.connect(audioCtx.destination);
+    const o = audioCtx.createOscillator(); o.type='sine'; o.frequency.value = 880; o.connect(g); o.start(); o.stop(audioCtx.currentTime + 0.04);
+  }catch(e){}
+}
+function playWin(){
+  try{
+    ensureAudio();
+    const g = audioCtx.createGain(); g.gain.value = 0.25; g.connect(audioCtx.destination);
+    const o1 = audioCtx.createOscillator(); o1.type='triangle'; o1.frequency.value=660; o1.connect(g); o1.start();
+    const o2 = audioCtx.createOscillator(); o2.type='sine'; o2.frequency.value=880; o2.connect(g); o2.start();
+    setTimeout(()=>{ o1.stop(); o2.stop(); }, 400);
+  }catch(e){}
+}
+function startBackgroundMusic(){
+  try{
+    ensureAudio(); if(musicNodes) return;
+    const gain = audioCtx.createGain(); gain.gain.value = 0.03; gain.connect(audioCtx.destination);
+    const o = audioCtx.createOscillator(); o.type='sine'; o.frequency.value=220; o.connect(gain); o.start();
+    const lfo = audioCtx.createOscillator(); lfo.type='sine'; lfo.frequency.value=0.25;
+    const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 40;
+    lfo.connect(lfoGain); lfoGain.connect(o.frequency);
+    lfo.start();
+    musicNodes = {gain,o,lfo,lfoGain};
+  }catch(e){}
+}
+function stopBackgroundMusic(){
+  try{ if(!musicNodes) return; musicNodes.o.stop(); musicNodes.lfo.stop(); musicNodes = null; }catch(e){}
+}
+document.getElementById('pauseBtn').addEventListener('click', ()=>{ playClick(); if(musicNodes){ stopBackgroundMusic(); document.getElementById('pauseBtn').textContent='Play Music'; } else { startBackgroundMusic(); document.getElementById('pauseBtn').textContent='Pause Music'; } });
+
+/* ========== Game Data & HUD ========== */
+const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d');
+let gameState = { level:1, running:false, objects:[], playerX:120, playerY:300, score:0, coins:0, badges:[] };
+const TANKS_COUNT = 5;
+let tanks = Array.from({length:TANKS_COUNT}, ()=>0);
+const levelTips = {
+  1: 'Use arrow keys to move near falling droplets and press SPACE to collect and store into 5 tanks.',
+  2: 'Fix 5 leaks (SPACE near leak) and build 2 underground tanks (SPACE at blueprint) then route water to plants.',
+  3: 'Dig 2 ponds (SPACE), plant 5 trees (SPACE), scoop water from pond and water plants (SPACE).'
+};
+const badgesInfo = {
+  1: {code:'RAIN_COLLECTOR',label:'Rain Collector'},
+  2: {code:'PIPE_FIXER',label:'Pipe Fixer'},
+  3: {code:'POND_PLANTER',label:'Pond & Planter'}
+};
+
+// HUD rendering
+const hudRow = document.getElementById('hudRow');
+function updateHUD(){
+  hudRow.innerHTML = '';
+  // tanks display
+  const tankWrap = document.createElement('div'); tankWrap.style.display='flex'; tankWrap.style.gap='6px';
+  for(let i=0;i<TANKS_COUNT;i++){
+    const t = document.createElement('div'); t.className='tank';
+    const f = document.createElement('div'); f.className='fill'; f.style.height = Math.max(0,Math.min(100,tanks[i])) + '%';
+    t.appendChild(f); tankWrap.appendChild(t);
+  }
+  // controls panel
+  const info = document.createElement('div'); info.style.display='flex'; info.style.flexDirection='column';
+  const instructions = document.createElement('div'); instructions.style.fontSize='13px'; instructions.style.color='#064b5b';
+  instructions.textContent = 'Use Arrow keys to move • Space to interact';
+  // score/coins
+  const coinNode = document.createElement('div'); coinNode.className='coins'; coinNode.innerHTML = 'Coins: <span id="coinsHUD">' + (window.player?.coins||0) + '</span>';
+  info.appendChild(instructions); info.appendChild(coinNode);
+  hudRow.appendChild(tankWrap);
+  hudRow.appendChild(info);
+}
+
+/* ========== Level logic & checks ========== */
+function initLevel(lv){
+  gameState.level = lv; gameState.objects = []; tanks = tanks.map(()=>0); gameState.score = 0;
+  document.getElementById('levelTip').textContent = levelTips[lv];
+  updateHUD();
+  if(lv===1){
+    // spawn water droplets
+    for(let i=0;i<18;i++){
+      gameState.objects.push({type:'drop', x:50 + Math.random()*canvas.width-100, y:-Math.random()*400, vy:1 + Math.random()*1.6});
+    }
+  } else if(lv===2){
+    // create 5 leaks, 2 tank blueprints, 4 plants
+    for(let i=0;i<5;i++) gameState.objects.push({type:'leak', x:140 + i*110, y:240, fixed:false});
+    gameState.objects.push({type:'tankBlueprint', x:200, y:320, built:false});
+    gameState.objects.push({type:'tankBlueprint', x:600, y:320, built:false});
+    for(let i=0;i<4;i++) gameState.objects.push({type:'plant', x:90 + i*160, y:360, watered:0});
+  } else if(lv===3){
+    // pond spots and tree spots
+    gameState.objects.push({type:'pondSpot', x:180, y:320, dug:false});
+    gameState.objects.push({type:'pondSpot', x:520, y:320, dug:false});
+    for(let i=0;i<5;i++) gameState.objects.push({type:'treeSpot', x:60 + i*150, y:360, planted:false});
+  }
+  gameState.playerX = 120; gameState.playerY = 300; gameState.running = true;
+  startBackgroundMusic();
+  requestAnimationFrame(loop);
+}
+
+/* ========== Interaction: movement by arrow keys, SPACE to interact ========== */
+const KEYS = { ArrowLeft:false, ArrowRight:false, ArrowUp:false, ArrowDown:false, Space:false };
+let lastKeyTime = 0;
+function applyMovement(){
+  const speed = 4;
+  if(KEYS.ArrowLeft) gameState.playerX -= speed;
+  if(KEYS.ArrowRight) gameState.playerX += speed;
+  if(KEYS.ArrowUp) gameState.playerY -= speed;
+  if(KEYS.ArrowDown) gameState.playerY += speed;
+  // clamp
+  gameState.playerX = Math.max(20, Math.min(canvas.width-20, gameState.playerX));
+  gameState.playerY = Math.max(40, Math.min(canvas.height-40, gameState.playerY));
+}
+window.addEventListener('keydown', (e)=>{
+  if(e.code==='Space'){ e.preventDefault(); KEYS.Space = true; handleAction(); return; }
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ KEYS[e.key] = true; lastKeyTime = Date.now(); }
+  // ESC back
+  if(e.key==='Escape'){ playClick(); if(screens.game.classList.contains('active')) show('profile'); else if(screens.profile.classList.contains('active')) show('welcome'); }
+});
+window.addEventListener('keyup', (e)=>{
+  if(e.code==='Space'){ KEYS.Space = false; }
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){ KEYS[e.key] = false; }
+});
+
+/* Mobile on-screen buttons */
+document.getElementById('dpad').querySelectorAll('.vbtn').forEach(btn=>{
+  btn.addEventListener('touchstart', (ev)=>{ ev.preventDefault(); const k = btn.dataset.key; KEYS[k] = true; lastKeyTime = Date.now(); });
+  btn.addEventListener('touchend', (ev)=>{ ev.preventDefault(); const k = btn.dataset.key; KEYS[k] = false; });
+});
+document.getElementById('mobileAction').addEventListener('touchstart', (ev)=>{ ev.preventDefault(); playClick(); handleAction(); });
+
+/* ========== Action (SPACE) behavior per level ========== */
+function handleAction(){
+  playClick();
+  const px = gameState.playerX, py = gameState.playerY;
+  function near(obj, r=42){ return Math.hypot(obj.x - px, obj.y - py) < r; }
+
+  if(gameState.level===1){
+    // check nearest droplet
+    const drop = gameState.objects.find(o=>o.type==='drop' && near(o, 40));
+    if(drop){
+      // fill next tank
+      const idx = tanks.findIndex(v=>v < 100);
+      if(idx>=0){ tanks[idx] = Math.min(100, tanks[idx] + 34); gameState.score += 10; updateHUD(); checkLevel1Win(); }
+    }
+  } else if(gameState.level===2){
+    // fix leaks
+    const leak = gameState.objects.find(o=>o.type==='leak' && !o.fixed && near(o, 36));
+    if(leak){ leak.fixed = true; gameState.score += 8; checkLevel2Win(); return; }
+    // build tanks (interact with blueprints)
+    const bp = gameState.objects.find(o=>o.type==='tankBlueprint' && !o.built && near(o, 50));
+    if(bp){ bp.built = true; gameState.score += 12; // mark big tank object
+      gameState.objects.push({type:'bigTank', x:bp.x, y:bp.y-40, filled:0}); checkLevel2Win(); return;
+    }
+    // water plants by filling path - if at a bigTank, pour into plants
+    const b = gameState.objects.find(o=>o.type==='bigTank' && near(o, 50));
+    if(b){ // pour a bit into plants
+      gameState.objects.filter(o=>o.type==='plant').forEach(p=>p.watered = Math.min(100, (p.watered||0) + 25));
+      gameState.score += 6; checkLevel2Win(); return;
+    }
+  } else if(gameState.level===3){
+    // dig pond
+    const ps = gameState.objects.find(o=>o.type==='pondSpot' && !o.dug && near(o, 48));
+    if(ps){ ps.dug = true; gameState.objects.push({type:'pond', x:ps.x, y:ps.y, water:100}); gameState.score += 10; checkLevel3Win(); return; }
+    // plant tree
+    const ts = gameState.objects.find(o=>o.type==='treeSpot' && !o.planted && near(o, 48));
+    if(ts){ ts.planted = true; gameState.objects.push({type:'tree', x:ts.x, y:ts.y-6, watered:0}); gameState.score += 6; checkLevel3Win(); return; }
+    // scoop from pond
+    const pond = gameState.objects.find(o=>o.type==='pond' && near(o, 60));
+    if(pond){
+      // scoop -> then next space near tree will water them (we simulate by increasing watered)
+      pond.water = Math.max(0, pond.water - 20);
+      // find nearest tree and water it if close after scooping: but require second SPACE near tree
+      gameState.lastScoop = {time:Date.now(), amount:20};
+      gameState.score += 4; checkLevel3Win(); return;
+    }
+    // if player recently scooped and near a tree -> water tree
+    if(gameState.lastScoop && (Date.now() - gameState.lastScoop.time) < 5000){
+      const tree = gameState.objects.find(o=>o.type==='tree' && Math.hypot(o.x - px, o.y - py) < 60);
+      if(tree){ tree.watered = Math.min(100, (tree.watered||0) + gameState.lastScoop.amount); gameState.lastScoop = null; gameState.score += 8; checkLevel3Win(); return; }
+    }
+  }
+}
+
+/* ========== Win checks ========== */
+function checkLevel1Win(){
+  if(tanks.every(v=>v>=100)){
+    awardLevel(1, 12, badgesInfo[1].code, badgesInfo[1].label);
+  }
+}
+function checkLevel2Win(){
+  const leaksFixed = gameState.objects.filter(o=>o.type==='leak' && o.fixed).length;
+  const builtTanks = gameState.objects.filter(o=>o.type==='bigTank').length;
+  const plantsWatered = gameState.objects.filter(o=>o.type==='plant' && (o.watered||0) >= 50).length;
+  // require 5 leaks fixed and 2 tanks built (we count blueprint-built)
+  if(leaksFixed >= 5 && builtTanks >= 2){
+    awardLevel(2, 18, badgesInfo[2].code, badgesInfo[2].label);
+  }
+}
+function checkLevel3Win(){
+  const ponds = gameState.objects.filter(o=>o.type==='pond' && o.water > 0).length;
+  const trees = gameState.objects.filter(o=>o.type==='tree').length;
+  const wateredTrees = gameState.objects.filter(o=>o.type==='tree' && (o.watered||0) >= 40).length;
+  // require 2 ponds dug, 5 trees planted, and trees watered
+  if(ponds >=2 && trees >=5 && wateredTrees >= 5){
+    awardLevel(3, 30, badgesInfo[3].code, badgesInfo[3].label);
+  }
+}
+
+/* Award coins, badges and show tip, then progress */
+function awardLevel(lvl, coinAmt, badgeCode, badgeLabel){
+  playWin();
+  window.player.coins = (window.player.coins||0) + coinAmt;
+  window.player.score = (window.player.score||0) + gameState.score;
+  // award badge once
+  if(!window.player.badges) window.player.badges = [];
+  if(!window.player.badges.includes(badgeCode)) window.player.badges.push(badgeCode);
+  // update UI
+  document.getElementById('coinsVal').textContent = window.player.coins;
+  document.getElementById('scoreVal').textContent = window.player.score;
+  updateBadges();
+
+  // groundwater conservation tips
+  const tips = {
+    1: 'Tip: Harvesting rainwater reduces runoff and recharges groundwater.',
+    2: 'Tip: Fix leaks and build storage to prevent water loss and protect groundwater.',
+    3: 'Tip: Ponds and trees increase infiltration, helping groundwater recharge.'
+  };
+  alert('Congratulations — You win Level ' + lvl + '!\nYou earned ' + coinAmt + ' coins and the "' + badgeLabel + '" badge.\n\n' + tips[lvl]);
+  // progress to next or end
+  if(lvl < 3){
+    show('game'); document.getElementById('levelSelect').value = String(lvl+1); initLevel(lvl+1);
+  } else {
+    document.getElementById('endTitle').textContent = 'Thank you for playing H2O HEROES';
+    document.getElementById('endText').textContent = 'You completed all levels! Total coins: ' + window.player.coins;
+    show('end');
+    stopBackgroundMusic();
+  }
+}
+
+/* Badges UI */
+function updateBadges(){
+  const bd = document.getElementById('badges'); bd.innerHTML = '';
+  (window.player?.badges || []).forEach(code=>{
+    const label = Object.values(badgesInfo).find(b=>b.code===code)?.label || code;
+    const el = document.createElement('div'); el.className='badge'; el.textContent = label; bd.appendChild(el);
+  });
+}
+
+/* ========== Canvas drawing loop ========== */
+function loop(){
+  // movement
+  applyMovement();
+
+  // update objects (drops)
+  if(gameState.level===1){
+    for(const o of gameState.objects){
+      if(o.type==='drop'){ o.y += o.vy; if(o.y > canvas.height - 40) { // reset to top
+        o.y = -10 - Math.random()*200; o.x = 40 + Math.random()*(canvas.width-80);
+      } }
+    }
+  }
+
+  // clear and draw
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // sky
+  ctx.fillStyle = '#8fd6ff'; ctx.fillRect(0,0,canvas.width,200);
+  // ground
+  ctx.fillStyle = '#6ec06e'; ctx.fillRect(0,360,canvas.width,60);
+
+  // draw objects
+  for(const o of gameState.objects){
+    if(o.type==='drop'){ ctx.beginPath(); ctx.ellipse(o.x, o.y, 6, 10, 0, 0, Math.PI*2); ctx.fillStyle = '#2aa9e0'; ctx.fill(); }
+    if(o.type==='leak'){ ctx.fillStyle = o.fixed ? '#8fd6a8' : '#ffb3b3'; ctx.beginPath(); ctx.arc(o.x, o.y, 12, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillText(o.fixed ? '✓' : '!', o.x-4, o.y+4); }
+    if(o.type==='tankBlueprint'){ ctx.fillStyle='#fff3cc'; ctx.fillRect(o.x-28, o.y-8, 56, 24); ctx.strokeStyle='#bfa'; ctx.strokeRect(o.x-28, o.y-8, 56, 24); ctx.fillStyle='#064b5b'; ctx.fillText('Tap (Space) to build', o.x-48, o.y-12); }
+    if(o.type==='bigTank'){ ctx.fillStyle='#fff'; ctx.fillRect(o.x-30, o.y-10, 60, 120); ctx.fillStyle='#2aa9e0'; const h = (o.filled/100)*100; ctx.fillRect(o.x-30, o.y+110 - h, 60, h); ctx.strokeRect(o.x-30, o.y-10, 60, 120); }
+    if(o.type==='plant'){ ctx.fillStyle = '#1a7f3a'; ctx.fillRect(o.x-6, o.y-28, 12, 28); ctx.fillStyle = '#4fd67d'; ctx.fillRect(o.x-18, o.y-36, 36, 10); if(o.watered) { ctx.fillStyle='#fff'; ctx.fillText(Math.round(o.watered)+'%', o.x-10, o.y-40); } }
+    if(o.type==='pondSpot'){ ctx.strokeStyle='#6b8b8b'; ctx.strokeRect(o.x-18, o.y-12, 36, 18); ctx.fillStyle='#fff'; ctx.fillText('Space to dig', o.x-28, o.y-18); }
+    if(o.type==='pond'){ ctx.fillStyle='#2aa9e0'; ctx.beginPath(); ctx.ellipse(o.x, o.y, 50, 24, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='#fff'; ctx.fillText('Water: '+(o.water||0), o.x-28, o.y-34); }
+    if(o.type==='treeSpot' && !o.planted){ ctx.fillStyle='#8b5a2b'; ctx.fillRect(o.x-4, o.y-8, 8, 20); ctx.fillStyle='#bfe9bf'; ctx.fillText('Space to plant', o.x-28, o.y-12); }
+    if(o.type==='tree'){ ctx.fillStyle='#8b5a2b'; ctx.fillRect(o.x-4, o.y-8, 8, 24); ctx.fillStyle='#1a7f3a'; ctx.beginPath(); ctx.ellipse(o.x, o.y-20, 18, 18, 0, 0, Math.PI*2); ctx.fill(); if(o.watered) { ctx.fillStyle='#fff'; ctx.fillText(Math.round(o.watered)+'%', o.x-10, o.y-40); } }
+  }
+
+  // draw tanks (HUD area near bottom-left)
+  for(let i=0;i<TANKS_COUNT;i++){
+    // visual is handled in HUD already; we keep canvas minimal
+  }
+
+  // draw boy (simple cartoon)
+  drawBoy(gameState.playerX, gameState.playerY);
+
+  // continue loop if running
+  if(gameState.running) requestAnimationFrame(loop);
+}
+
+/* drawBoy function: simple cartoon boy with bucket */
+function drawBoy(x,y){
+  ctx.save(); ctx.translate(x,y);
+  // legs
+  ctx.fillStyle = '#5b3b2e'; ctx.fillRect(-8,18,6,12); ctx.fillRect(2,18,6,12);
+  // pants
+  ctx.fillStyle = '#2b6fb2'; ctx.fillRect(-12,2,24,20);
+  // body
+  ctx.fillStyle = '#ffd39a'; ctx.beginPath(); ctx.arc(0,-4,14,0,Math.PI*2); ctx.fill();
+  // head
+  ctx.fillStyle = '#ffd39a'; ctx.beginPath(); ctx.arc(0,-28,18,0,Math.PI*2); ctx.fill();
+  // bucket
+  ctx.fillStyle = '#bfbfbf'; ctx.fillRect(20,2,14,10); ctx.strokeRect(20,2,14,10);
+  // arm to bucket
+  ctx.strokeStyle = '#ffd39a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(20,4); ctx.stroke();
+  ctx.restore();
+}
+
+/* ========== UI: level select & load ========== */
+document.getElementById('loadLevel').addEventListener('click', ()=>{ playClick(); const lv = Number(document.getElementById('levelSelect').value); initLevel(lv); });
+
+/* ========== Responsive canvas sizing ========== */
+function resizeCanvas(){ const r = canvas.getBoundingClientRect(); canvas.width = Math.floor(r.width); canvas.height = Math.floor(r.height || 420); }
+new ResizeObserver(resizeCanvas).observe(canvas);
+resizeCanvas();
+
+/* ========== Initialize small helpers ========== */
+alert('Welcome to H2O HEROES!\nControls: Arrow keys to move • Space to interact. Mobile users: use on-screen buttons shown in game.');
+
+function updateCoinsUI(){ document.getElementById('coinsVal').textContent = window.player?.coins || 0; }
+setInterval(()=>{ // keep HUD coins updated occasionally
+  document.getElementById('coinsVal').textContent = window.player?.coins || 0;
+  updateHUD();
+}, 800);
+
+/* ========== Back/Escape convenience ========== */
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ playClick(); if(screens.game.classList.contains('active')) show('profile'); else if(screens.profile.classList.contains('active')) show('welcome'); } });
+
+/* ========== Show mobile controls on touch devices (soft detection) ========== */
+(function checkMobile(){ const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints>0; if(isTouch) document.getElementById('mobileControls').style.display = 'none'; /* will show only when game screen active */ })();
+
+/* ========== Add Save/Back precautions: prompt before leaving while playing ========== */
+window.addEventListener('beforeunload', (e)=>{
+  if(gameState.running){ e.preventDefault(); e.returnValue = ''; }
+});
+</script>
+</body>
+</html>
